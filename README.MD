@@ -1,6 +1,7 @@
 # MolMiner &nbsp;—&nbsp; Towards Controllable, 3D-Aware, Fragment-Based Molecular Design
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.9%2B-green.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-red.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15496963.svg)](https://doi.org/10.5281/zenodo.15496963)
 
 <p align="center">
   <img src="figures/logo.png" alt="MolMiner logo" width="22%">
@@ -22,6 +23,15 @@ git clone https://github.com/raulorteg/molminer.git
 cd molminer
 pip install -r requirements.txt
 ```
+
+### 1.2 Downloading Model Checkpoints
+
+Pre-trained model checkpoints for **MolMiner** are available via Zenodo.
+
+- **Zenodo Record**: [https://zenodo.org/records/15496963](https://zenodo.org/records/15496963)
+- **Direct Download (Files Archive)**: [https://zenodo.org/api/records/15496963/files-archive](https://zenodo.org/api/records/15496963/files-archive)
+
+These checkpoints contain trained weights for: MolMiner model, GMM (Gaussian Mixture Model), Fragment-Starter model.
 
 ## 2. Training
 
@@ -78,13 +88,13 @@ python train_molminer.py \
 
 ```bash
 python postprocess_calibration.py --samples=10 --ckpt_molminer='../checkpoints/best_molminer.pth' --ckpt_starter='../checkpoints/best_starter.pth' --ckpt_gmm='../checkpoints/gmm_model.pkl' --stats_path='../data/zinc/stats.json' --vocab_fragments=
-'../data/zinc/vocab_fragments.csv' --vocab_attachments='../data/zinc/vocab_attachments.csv' --vocab_anchors='../data/zinc/vocab_anchors.csv' --device=cpu
+'../data/zinc/vocab_fragments.csv' --vocab_attachments='../data/zinc/vocab_attachments.csv' --vocab_anchors='../data/zinc/vocab_anchors.csv' --device=cpu --weighted
 # -> data/calibration/{prop}_calibration.txt
 ```
 
 ### 3.2 Generate unconditionally 
 ```bash
-python generate_random.py --samples=10 --ckpt_molminer='../checkpoints/best_molminer.pth' --ckpt_starter='../checkpoints/best_starter.pth' --ckpt_gmm='../checkpoints/gmm_model.pkl' --stats_path='../data/zinc/stats.json' --vocab_fragments='../data/zinc/vocab_fragments.csv' --vocab_attachments='../data/zinc/vocab_attachments.csv' --vocab_anchors='../data/zinc/vocab_anchors.csv' --device=cpu
+python generate_random.py --samples=10 --ckpt_molminer='../checkpoints/best_molminer.pth' --ckpt_starter='../checkpoints/best_starter.pth' --ckpt_gmm='../checkpoints/gmm_model.pkl' --stats_path='../data/zinc/stats.json' --vocab_fragments='../data/zinc/vocab_fragments.csv' --vocab_attachments='../data/zinc/vocab_attachments.csv' --vocab_anchors='../data/zinc/vocab_anchors.csv' --device=cpu --weighted
 # -> data/generated.txt
 ```
 

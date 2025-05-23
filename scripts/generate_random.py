@@ -54,7 +54,7 @@ def main() -> None:
     p.add_argument("--vocab_attachments", required=True, type=pathlib.Path)
     p.add_argument("--vocab_anchors", required=True, type=pathlib.Path)
     p.add_argument("--device", default="cuda")
-    p.add_argument("--k", type=int, default=5)
+    p.add_argument("--k", type=int, default=10)
     p.add_argument("--greedy", action="store_true")
     p.add_argument("--weighted", action="store_true")
     p.add_argument("--max_tries", type=int, default=10)
