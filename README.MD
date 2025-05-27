@@ -115,12 +115,11 @@ python postprocess_calibration_plot.py --calibration_dir='../data/calibration' -
 
 If you use MolMiner in academic work, please cite:
 
-Note: To be updated.
 ```bibtex
-@misc{ochoa2024molminertransformerarchitecturefragmentbased,
-      title={MolMiner: Transformer architecture for fragment-based autoregressive generation of molecular stories}, 
-      author={Raul Ortega Ochoa and Tejs Vegge and Jes Frellsen},
-      year={2024},
+@misc{ortegaochoa2025molminercontrollable3dawarefragmentbased,
+      title={MolMiner: Towards Controllable, 3D-Aware, Fragment-Based Molecular Design}, 
+      author={Raul Ortega-Ochoa and Tejs Vegge and Jes Frellsen},
+      year={2025},
       eprint={2411.06608},
       archivePrefix={arXiv},
       primaryClass={cs.LG},
