@@ -1,7 +1,8 @@
 # MolMiner &nbsp;—&nbsp; Towards Controllable, 3D-Aware, Fragment-Based Molecular Design
-[![Python](https://img.shields.io/badge/python-3.9%2B-green.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-Apache%202.0-red.svg)](https://www.apache.org/licenses/LICENSE-2.0)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15496963.svg)](https://doi.org/10.5281/zenodo.15496963)
+[![Python](https://img.shields.io/badge/python-3.9%2B-green.svg)](https://www.python.org/)  
+[![License](https://img.shields.io/badge/License-Apache%202.0-red.svg)](https://www.apache.org/licenses/LICENSE-2.0)  
+[![Model Weights](https://img.shields.io/badge/Zenodo-Model%20Weights-4c6ef5.svg)](https://doi.org/10.5281/zenodo.15496963)  
+[![arXiv](https://img.shields.io/badge/arXiv-2411.06608-b31b1b.svg)](https://arxiv.org/abs/2411.06608)
 
 <p align="center">
   <img src="figures/logo.png" alt="MolMiner logo" width="22%">
