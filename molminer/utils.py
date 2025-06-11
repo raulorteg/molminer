@@ -479,7 +479,11 @@ def set_seed(seed: int) -> None:
     torch.manual_seed(seed)  # torch cpu
 
     if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)  # torch gpu
+        torch.cuda.manual_seed_all(seed)  # torch gpu
+    
+    # Ensure deterministic behavior in CUDA backend
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 def process_smiles(
