@@ -280,6 +280,11 @@ class MolecularGenerator(object):
         # if everything is unknown -> unconditional GMM
         if proto_msk.sum() == self.num_dims:
             scaled_conditions, _ = self.gmm.sample(n_samples=num_samples)
+        
+        # elif everything is known -> skip sampling GMM
+        elif proto_msk.sum() == 0:
+            scaled_conditions = np.tile(proto_x, (num_samples, 1))
+
         else:
             # Conditional sampling
             samples = []
