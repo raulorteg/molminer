@@ -541,6 +541,7 @@ class Architect:
         vocab_anchors_df: pd.DataFrame,
         properties: torch.Tensor,
         sigma: float,
+        seed: Optional[int] = None,
     ):
         """
         Architect class for assembling molecules from fragments.
@@ -557,10 +558,13 @@ class Architect:
             Tensor of conditioning properties.
         sigma : float
             Sigma value for computing the distance bias in the attn mechanism.
+        seed : int, optional
+            Random seed for reproducibility. Default is None (no fixed seed).
         """
         self.vocab_fragments_df = vocab_fragments_df
         self.vocab_attachments_df = vocab_attachments_df
         self.vocab_anchors_df = vocab_anchors_df
+        self.rdkit_seed = seed
 
         # this parameter controls the std used to make pairwise distances into attn_scores
         self.sigma = sigma
@@ -999,7 +1003,7 @@ class Architect:
         molecule = Chem.AddHs(molecule)
 
         # create the conformers
-        AllChem.EmbedMultipleConfs(molecule, num_conformers)
+        AllChem.EmbedMultipleConfs(molecule, num_conformers, randomSeed=self.rdkit_seed)
 
         # optimize the conformers. Note: numThreads=0 to use all available
         force_field = AllChem.UFFGetMoleculeForceField(molecule)
