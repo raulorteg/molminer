@@ -1,5 +1,5 @@
 import sys
-from typing import Union
+from typing import List, Optional, Tuple, Union
 
 sys.path.append("..")
 
@@ -225,6 +225,7 @@ class MolecularGenerator(object):
         weighted: bool = True,
         greedy: bool = False,
         max_tries: int = 10,
+        seed: Union[int, None] = None,
     ) -> list[str]:
         """
         Generate one or more molecules, optionally conditioned on property values.
@@ -243,6 +244,8 @@ class MolecularGenerator(object):
             If True, use deterministic argmax sampling in the transformer.
         max_tries : int
             Max attempts per attachment point before skipping.
+        seed : int or None
+            Random seed for the internal Architect (and reproducibility). None = no fixed seed.
 
         Returns
         -------
@@ -301,6 +304,7 @@ class MolecularGenerator(object):
                 weighted=weighted,
                 greedy=greedy,
                 max_tries=max_tries,
+                seed=seed,
             )
 
             if not failedFlag:
@@ -308,7 +312,219 @@ class MolecularGenerator(object):
 
         return generated_samples
 
-    def _sample(self, c, topk, weighted, greedy, max_tries):
+    @staticmethod
+    def _canonical_smiles_from_architect(architect) -> Optional[str]:
+        """Best-effort canonical SMILES for the current partial molecule in `architect`."""
+        try:
+            rw = architect.molecule.get("rdkit_molecule")
+            if rw is None:
+                return None
+            mol = rw.GetMol()
+            if mol is None:
+                return None
+            Chem.SanitizeMol(mol)
+            return Chem.MolToSmiles(mol, canonical=True)
+        except Exception:
+            return None
+
+    def sample_with_intermediate_smiles(
+        self,
+        *,
+        logP: Union[float, None] = None,
+        qed: Union[float, None] = None,
+        SAS: Union[float, None] = None,
+        FractionCSP3: Union[float, None] = None,
+        molWt: Union[float, None] = None,
+        TPSA: Union[float, None] = None,
+        MR: Union[float, None] = None,
+        hbd: Union[float, None] = None,
+        hba: Union[float, None] = None,
+        num_rings: Union[float, None] = None,
+        num_rotable_bonds: Union[float, None] = None,
+        num_quiral_centers: Union[float, None] = None,
+        num_samples: int = 1,
+        topk: int = 5,
+        weighted: bool = True,
+        greedy: bool = False,
+        max_tries: int = 10,
+        seed: Union[int, None] = None,
+    ) -> List[Tuple[Optional[str], bool, str, List[str]]]:
+        """
+        Same conditioning and sampling as :meth:`sample`, but each run returns
+        intermediate canonical SMILES after the seed fragment and after each
+        docking step (in order).
+
+        Returns
+        -------
+        list of tuple
+            One tuple per requested sample: ``(final_smiles_or_none, failed,
+            message, intermediates)``. On failure, ``intermediates`` may still
+            contain partial prefixes; ``final_smiles_or_none`` is None.
+        """
+        prompted = {
+            "logP": logP,
+            "qed": qed,
+            "SAS": SAS,
+            "FractionCSP3": FractionCSP3,
+            "molWt": molWt,
+            "TPSA": TPSA,
+            "MR": MR,
+            "hbd": hbd,
+            "hba": hba,
+            "num_rings": num_rings,
+            "num_rotable_bonds": num_rotable_bonds,
+            "num_quiral_centers": num_quiral_centers,
+        }
+
+        proto_x = np.zeros(self.num_dims, dtype=float)
+        proto_msk = np.ones(self.num_dims, dtype=int)
+
+        for i, prop in enumerate(self.prop_order):
+            v = prompted[prop]
+            if v is not None:
+                proto_x[i] = self.scaler.scale(v, property_name=prop)
+                proto_msk[i] = 0
+
+        if proto_msk.sum() == self.num_dims:
+            scaled_conditions, _ = self.gmm.sample(n_samples=num_samples)
+        elif proto_msk.sum() == 0:
+            scaled_conditions = np.tile(proto_x, (num_samples, 1))
+        else:
+            samples = []
+            for _ in range(num_samples):
+                _, x_recon = self._conditional_sample_gmm(proto_x, proto_msk)
+                samples.append(x_recon)
+            scaled_conditions = np.vstack(samples)
+
+        results: List[Tuple[Optional[str], bool, str, List[str]]] = []
+        for scaled_condition in tqdm(scaled_conditions):
+            results.append(
+                self._sample_with_intermediate_smiles(
+                    c=torch.tensor(scaled_condition, dtype=torch.float).to(
+                        self.device
+                    ),
+                    topk=topk,
+                    weighted=weighted,
+                    greedy=greedy,
+                    max_tries=max_tries,
+                    seed=seed,
+                )
+            )
+        return results
+
+    def _sample_with_intermediate_smiles(
+        self, c, topk, weighted, greedy, max_tries, seed=None
+    ) -> Tuple[Optional[str], bool, str, List[str]]:
+        """
+        Same as :meth:`_sample`, but records canonical SMILES after ``start``
+        and after each successful ``dock``. Does not modify :meth:`_sample`.
+        """
+        intermediates: List[str] = []
+        fail_reason = ""
+
+        with torch.no_grad():
+            logits = self.starter(x=c.unsqueeze(0)).squeeze(0).cpu()
+
+        fragment_idx = top_k_sample(logits, k=topk, weighted=weighted)
+        smiles = self.fragments_smiles[fragment_idx]
+
+        architect = Architect(
+            vocab_fragments_df=self.vocab_fragments,
+            vocab_attachments_df=self.vocab_attachments,
+            vocab_anchors_df=self.vocab_anchors,
+            properties=c,
+            sigma=2.0,
+            seed=seed,
+        )
+
+        ErrorRaised = False
+        architect.start(smiles=smiles)
+        s0 = self._canonical_smiles_from_architect(architect)
+        if s0 is not None:
+            intermediates.append(s0)
+
+        while (len(architect.molecule["queue"]) > 0) and (not ErrorRaised):
+            batch = collate_fn([architect.create_query()], inference_mode=True)
+
+            with torch.no_grad():
+                logits = self.molminer(
+                    atom_ids=batch["nodes_vocab_index"].to(self.device),
+                    attn_mask=batch["pairwise_distances"].to(self.device),
+                    focal_attachment_order=batch["focal_attachment_order"].to(
+                        self.device
+                    ),
+                    nodes_saturation=batch["nodes_saturation"].to(self.device),
+                    focal_attachment_type=batch["focal_attachment_type"].to(
+                        self.device
+                    ),
+                    properties=batch["properties"].to(self.device),
+                    attn_mask_readout=batch["distances_to_hit"].to(self.device),
+                )
+
+            logits = logits.squeeze(0)
+            if getattr(self.device, "type", self.device) != "mps":
+                logits = logits.double()
+            probs = torch.softmax(logits, dim=0).cpu()
+
+            dock_accepted = False
+            num_tries = 0
+            while not dock_accepted:
+                if num_tries > max_tries:
+                    ErrorRaised = True
+                    fail_reason = f"Max. number of docking attempts reached (tries {num_tries}/{max_tries})"
+                    break
+
+                probs_ = probs / sum(probs)
+
+                if greedy:
+                    i = int(torch.argmax(probs_, dim=-1))
+                else:
+                    p = probs_.numpy().astype(np.float64)
+                    p = p / p.sum()
+                    i = np.random.choice(np.arange(0, len(probs)), p=p)
+
+                tmp = self.vocab_attachments.iloc[i]
+                next_fragment, next_highlightAtoms = (
+                    tmp["smiles"],
+                    tmp["anchors"],
+                )
+
+                bool_flag, fail_reason = architect.can_dock(
+                    next_fragment, next_highlightAtoms
+                )
+                if bool_flag:
+                    try:
+                        architect.dock(
+                            next_fragment, next_highlightAtoms, usethreads=True
+                        )
+                        dock_accepted = True
+                        sk = self._canonical_smiles_from_architect(architect)
+                        if sk is not None:
+                            intermediates.append(sk)
+                    except Exception:
+                        ErrorRaised = True
+                        fail_reason = "Exception in docking, can_dock didnt catch it"
+                        break
+                else:
+                    num_tries += 1
+                    probs[i] *= 0
+
+        if (len(architect.molecule["nodes_vocab_index"]) > 1) and (not ErrorRaised):
+            mol = architect.molecule["rdkit_molecule"].GetMol()
+            Chem.SanitizeMol(mol)
+            smiles_out = Chem.MolToSmiles(mol, canonical=True)
+
+            return smiles_out, False, "", intermediates
+
+        else:
+            msg = (
+                fail_reason
+                if ErrorRaised
+                else "Incomplete generation or fewer than two fragments"
+            )
+            return None, True, msg, intermediates
+
+    def _sample(self, c, topk, weighted, greedy, max_tries, seed=None):
         """
         Core sampling routine: seed selection + autoregressive fragment generation.
 
@@ -327,6 +543,7 @@ class MolecularGenerator(object):
             vocab_anchors_df=self.vocab_anchors,
             properties=c,
             sigma=2.0,
+            seed=seed,
         )
 
         ErrorRaised = False
@@ -352,14 +569,19 @@ class MolecularGenerator(object):
                     attn_mask_readout=batch["distances_to_hit"].to(self.device),
                 )
 
-            # cast to float64 to prevent precision errors (probs must sum up to 1)
-            logits = logits.squeeze(0).double()
+            # cast to float64 to prevent precision errors (probs must sum up to 1); skip on MPS (float64 not supported)
+            logits = logits.squeeze(0)
+            if getattr(self.device, "type", self.device) != "mps":
+                logits = logits.double()
             probs = torch.softmax(logits, dim=0).cpu()
 
             dock_accepted = False
             num_tries = 0
             while not dock_accepted:
                 if num_tries > max_tries:
+                    # Experiment: cauterize and continue (uncomment below, comment ErrorRaised/fail_reason)
+                    # architect.dock("<empty>", [], usethreads=False)
+                    # dock_accepted = True
                     ErrorRaised = True
                     fail_reason = f"Max. number of docking attempts reached (tries {num_tries}/{max_tries})"
                     break
@@ -369,7 +591,9 @@ class MolecularGenerator(object):
                 if greedy:
                     i = int(torch.argmax(probs_, dim=-1))
                 else:
-                    i = np.random.choice(np.arange(0, len(probs)), p=probs_.numpy())
+                    p = probs_.numpy().astype(np.float64)
+                    p = p / p.sum()  # ensure exactly 1.0 for np.random.choice
+                    i = np.random.choice(np.arange(0, len(probs)), p=p)
 
                 tmp = self.vocab_attachments.iloc[i]
                 next_fragment, next_highlightAtoms = (

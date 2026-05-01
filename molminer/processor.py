@@ -713,6 +713,9 @@ class Architect:
             Message indicating the result.
         """
 
+        if isinstance(attachment, int):
+            attachment = [attachment]
+
         # exception, if smiles=="<empty>" its a cauterization, and that is always possible
         if smiles == "<empty>":
             return True, "Cauterization is valid."
@@ -833,6 +836,9 @@ class Architect:
         usethreads : bool, optional
             Whether to use multithreaded conformer optimization.
         """
+
+        if isinstance(attachment, int):
+            attachment = [attachment]
 
         if smiles == "<empty>":
             self.molecule["queue"] = self.molecule["queue"][1:]
@@ -1003,7 +1009,9 @@ class Architect:
         molecule = Chem.AddHs(molecule)
 
         # create the conformers
-        AllChem.EmbedMultipleConfs(molecule, num_conformers, randomSeed=self.rdkit_seed)
+        params = AllChem.ETKDGv3()
+        params.randomSeed = int(self.rdkit_seed) if self.rdkit_seed is not None else -1
+        AllChem.EmbedMultipleConfs(molecule, int(num_conformers), params)
 
         # optimize the conformers. Note: numThreads=0 to use all available
         force_field = AllChem.UFFGetMoleculeForceField(molecule)

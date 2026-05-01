@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 from rdkit import RDLogger
 from torch.utils.data import DataLoader
+import torch.nn.functional as F
 from tqdm import tqdm
 
 # Suppress RDKit warnings
@@ -145,6 +146,13 @@ def _parse_args() -> argparse.Namespace:
         "--seed", type=int, default=42, help="Random seed for reproducibility"
     )
 
+    p.add_argument(
+        "--term_weight",
+        type=float,
+        default=0.5,
+        help="Downweight applied when the true next_token is the termination token (<empty>). <1.0 reduces termination overrepresentation.",
+    )
+
     return p.parse_args()
 
 
@@ -230,7 +238,6 @@ def main():
 
     # optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.peak_lr)
-    loss_fn = nn.CrossEntropyLoss()
 
     # load into memory the rollouts used for validation
     # Note: these do not need to be recomputed every epoch, since its the baseline
@@ -321,7 +328,10 @@ def main():
             )  # Target shape: (batch_size,)
 
             # Compute the loss
-            loss = loss_fn(logits, target)
+            ce = F.cross_entropy(logits, target, reduction="none")  # shape [B]
+            weights = torch.ones_like(ce)
+            weights[target == 0] = args.term_weight # reweight termination token (id=0) by e.g., 0.5
+            loss = (ce * weights).mean()
 
             # Backward pass and optimization
             loss.backward()
@@ -374,9 +384,7 @@ def main():
                 )  # Target shape: (batch_size,)
 
                 # Compute the loss
-                loss = loss_fn(
-                    logits, target
-                )  # CrossEntropyLoss between predicted logits and target
+                loss = F.cross_entropy(logits, target)
 
                 # Update stats
                 running_sum += loss.item() * args.batch_size
@@ -388,6 +396,7 @@ def main():
             std_val_loss = ((running_sum_squared / count) - (mean_val_loss**2)) ** 0.5
 
         # save the last checkpoint of the model
+        last_ckpt = ckpt_dir / f"last_{args.exp_name}_{epoch+1}.pth"
         torch.save(
             {
                 "epoch": epoch + 1,
