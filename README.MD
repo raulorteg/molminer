@@ -79,6 +79,7 @@ python train_molminer.py \
   --data_dir ../data/test \
   --ckpt_dir ../checkpoints \
   --fixedrollout  \      # remove to use adaptive roll-outs
+  --geom_requires_grad \ 
   --total_epochs 10
 # -> ckpt_dir/best_molminer.pth, cpkt_dir/last_molminer/pth
 ```
@@ -99,6 +100,24 @@ python generate_random.py --samples=10 --ckpt_molminer='../checkpoints/best_molm
 # -> data/generated.txt
 ```
 
+### 3.3 Generate conditionally inside a property window
+
+Define a window with any set of inequality constraints over the twelve properties;
+unconstrained properties are sampled from the GMM prior. The window is applied twice —
+to reject prompt vectors, and to decide which generated molecules count as hits.
+
+```bash
+python generate_window.py --n_target=100 \
+  --constraint 'molWt<=500' --constraint '1<=logP<=5' \
+  --constraint 'hbd<=5' --constraint 'hba<=10' \
+  --ckpt_molminer='../checkpoints/best_molminer.pth' --ckpt_starter='../checkpoints/best_starter.pth' --ckpt_gmm='../checkpoints/gmm_model.pkl' --stats_path='../data/zinc/stats.json' --vocab_fragments='../data/zinc/vocab_fragments.csv' --vocab_attachments='../data/zinc/vocab_attachments.csv' --vocab_anchors='../data/zinc/vocab_anchors.csv' --device=cpu --weighted \
+  --out='../data/generated/window.txt'
+# -> data/generated/window.txt (all) + window_passing.txt (in-window subset)
+```
+
+Supported forms: `molWt<=500`, `1<=logP<=5`, `num_chiral_centers==0`
+(`<=`, `<`, `>=`, `>`, `==`). Count properties are rounded before comparison.
+
 ## 4. Analyze results
 
 ### 4.1 Compute statistics on molecules generated unconditionally
@@ -108,7 +127,7 @@ python postprocess_generated_statistics.py
 
 ### 4.2 Create the Calibration plot for each of the twelve properties
 ```bash
-python postprocess_calibration_plot.py --calibration_dir='../data/calibration' --stats_path='../data/zinc/stats.json' --figure_savepath='../figures/calibration.png'
+python postprocess_calibration_plot.py --calibration_dir='../data/calibration' --stats_path='../data/zinc/stats.json' --figure_savepath='../figures/calibration.png' --median
 # -> figures/calibration.png
 ```
 

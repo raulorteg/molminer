@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# OS
+.DS_Store
+
+# Model weights and fitted auxiliaries (distributed via Zenodo, not git)
+*.pth
+*.pkl
+*.npy
+*.npz
+!checkpoints/README.MD
+
+# Generated data and analysis outputs
+data/generated/
+data/calibration/
+data/calibration-*/
+data/generated*.txt
+*.zip
+
+# Experiment scratch: precomputed sweeps, run logs, per-shard results
+scripts/mci/
+scripts/logs/
+scripts/results_greedy/
+*.jsonl
+*.err
+
+# Study outputs written to the repo root
+/*.png
+/*.pdf
+/*.csv
+/*.txt
+/*.log

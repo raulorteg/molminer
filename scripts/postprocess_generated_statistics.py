@@ -1,7 +1,9 @@
 import os
 import sys
 
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 import pandas as pd
 import rdkit.Chem as Chem
 import seaborn as sns
@@ -17,6 +19,28 @@ import sascorer
 from rdkit import Chem, DataStructs
 from rdkit.Chem import AllChem
 from scipy.stats import wasserstein_distance
+
+from rdkit import RDLogger
+
+RDLogger.DisableLog("rdApp.*")  # silence the rdkit warnings
+
+
+def _maybe_scientific_y_axis(ax, threshold: float = 0.05) -> None:
+    """Use a scientific y-axis when the value span is small."""
+    ymin, ymax = ax.get_ylim()
+    span = max(abs(ymin), abs(ymax))
+    if 0 < span <= threshold:
+        ax.ticklabel_format(
+            axis="y", style="sci", scilimits=(0, 0), useMathText=True
+        )
+        ax.yaxis.offsetText.set_fontsize(7)
+
+
+def _normalize_chiral_column(df: pd.DataFrame) -> pd.DataFrame:
+    """Rename num_quiral_centers to num_chiral_centers when needed."""
+    if "num_quiral_centers" in df.columns and "num_chiral_centers" not in df.columns:
+        df = df.rename(columns={"num_quiral_centers": "num_chiral_centers"})
+    return df
 
 
 def compute_generation_stats(
@@ -124,7 +148,7 @@ def compute_properties(smiles: str):
         - hba: Number of hydrogen bond acceptors
         - num_rings: Number of rings
         - num_rotable_bonds: Number of rotatable bonds
-        - num_quiral_centers: Number of chiral centers
+        - num_chiral_centers: Number of chiral centers
 
     Parameters:
     -----------
@@ -179,8 +203,8 @@ def compute_wasserstein_distances(
         A dictionary mapping each shared property name to its Wasserstein distance.
     """
     # load the sets of generated and reference SMILES molecules
-    df1 = pd.read_csv(file1, sep=sep)
-    df2 = pd.read_csv(file2, sep=sep)
+    df1 = _normalize_chiral_column(pd.read_csv(file1, sep=sep))
+    df2 = _normalize_chiral_column(pd.read_csv(file2, sep=sep))
 
     # Identify common property columns (exclude 'smiles')
     props = [c for c in df1.columns if c != "smiles" and c in df2.columns]
@@ -231,7 +255,7 @@ def annotate_smiles_w_props(infile: str, outfile: str):
         "hba",
         "num_rings",
         "num_rotable_bonds",
-        "num_quiral_centers",
+        "num_chiral_centers",
     ]
 
     # compute all properties for all smiles
@@ -252,9 +276,9 @@ def plot_property_kde(
     file_paths,
     names,
     outfile,
-    fig_width=7,
-    fig_height=9,
-    label_fontsize=9,
+    fig_width=7.5,
+    fig_height=5.5,
+    label_fontsize=10,
     tick_fontsize=8,
     legend_fontsize=8,
 ):
@@ -273,10 +297,10 @@ def plot_property_kde(
         Path to save the resulting multi-panel PNG figure.
 
     fig_width : float
-        Width of the figure in inches (default: 7).
+        Width of the figure in inches (default: 7.5).
 
     fig_height : float
-        Height of the figure in inches (default: 9).
+        Height of the figure in inches (default: 5.5).
 
     label_fontsize : int
         Font size for axis labels.
@@ -305,7 +329,7 @@ def plot_property_kde(
         "hba",
         "num_rings",
         "num_rotable_bonds",
-        "num_quiral_centers",
+        "num_chiral_centers",
     ]
 
     discrete_properties = [
@@ -313,26 +337,38 @@ def plot_property_kde(
         "hba",
         "num_rings",
         "num_rotable_bonds",
-        "num_quiral_centers",
+        "num_chiral_centers",
     ]
 
     dataframes = []
     for path in file_paths:
-        df = pd.read_csv(path)
+        df = _normalize_chiral_column(pd.read_csv(path))
         df = df[properties]
         dataframes.append(df)
 
-    fig, axes = plt.subplots(4, 3, figsize=(fig_width, fig_height))
+    fig, axes = plt.subplots(
+        3,
+        4,
+        figsize=(fig_width, fig_height),
+        gridspec_kw={"wspace": 0.30, "hspace": 0.38},
+    )
     axes = axes.flatten()
 
-    # Collect labels once for global legend
-    handles = []
-    labels = []
+    prop_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    color_by_name = {"Dataset": "gray"}
+    _k = 0
+    for n in names:
+        if n != "Dataset":
+            color_by_name[n] = prop_cycle[_k % len(prop_cycle)]
+            _k += 1
+
+    idx_dataset = names.index("Dataset") if "Dataset" in names else None
 
     for i, prop in enumerate(properties):
         ax = axes[i]
         if prop not in discrete_properties:
             for df, name in zip(dataframes, names):
+                c = color_by_name[name]
                 if name == "Dataset":
                     plot = sns.kdeplot(
                         df[prop],
@@ -341,11 +377,17 @@ def plot_property_kde(
                         linewidth=2,
                         fill=True,
                         alpha=0.3,
-                        color="gray",
+                        color=c,
                     )
                 else:
                     plot = sns.kdeplot(
-                        df[prop], ax=ax, label=name, linewidth=2, fill=False, alpha=0.8
+                        df[prop],
+                        ax=ax,
+                        label=name,
+                        linewidth=2,
+                        fill=False,
+                        alpha=0.8,
+                        color=c,
                     )
         else:
             width = 0.8 / len(dataframes)
@@ -359,19 +401,14 @@ def plot_property_kde(
                     .reindex(all_values, fill_value=0)
                     .sort_index()
                 )
-                bars = ax.bar(
+                ax.bar(
                     [x + j * width for x in range(len(all_values))],
                     counts.values,
                     width=width,
                     label=name,
-                    color="gray" if name == "Dataset" else None,
-                    edgecolor="black" if name == "Dataset" else None,
+                    color=color_by_name[name],
+                    edgecolor=None,
                 )
-                if i == 0 and j == 0:
-                    # Save only one set of bars for the legend
-                    handles.append(bars)
-                    labels.append(name)
-
             ax.set_xticks(
                 [x + width * (len(dataframes) - 1) / 2 for x in range(len(all_values))]
             )
@@ -381,24 +418,86 @@ def plot_property_kde(
                 "hba": 8.5,
                 "num_rings": 5.5,
                 "num_rotable_bonds": 9.5,
-                "num_quiral_centers": 4.5,
+                "num_chiral_centers": 4.5,
             }
             ax.set_xlim(-0.5, max_bar[prop])
 
-        ax.set_ylabel(
-            "Density" if prop not in discrete_properties else "Frequency",
-            fontsize=label_fontsize,
-        )
-        ax.set_xlabel(prop, fontsize=label_fontsize)
+        # Y-label only on the first column, Frequency on the last row
+        row = i // 4
+        if i % 4 == 0:
+            y_lab = "Density" if row < 2 else "Frequency"
+            ax.set_ylabel(y_lab, fontsize=label_fontsize)
+        else:
+            ax.set_ylabel("", fontsize=label_fontsize)
+        ax.set_xlabel("")
+        ax.set_title(prop, fontsize=9.5)
         ax.tick_params(axis="both", labelsize=tick_fontsize)
+        _maybe_scientific_y_axis(ax)
+
+        if idx_dataset is not None and idx_dataset < len(dataframes):
+            a = (
+                pd.to_numeric(dataframes[idx_dataset][prop], errors="coerce")
+                .dropna()
+                .values
+            )
+            y_annot = 0.98
+            for idx, _ in enumerate(names):
+                if idx_dataset is not None and idx == idx_dataset:
+                    continue
+                if idx >= len(dataframes):
+                    continue
+                b = (
+                    pd.to_numeric(dataframes[idx][prop], errors="coerce")
+                    .dropna()
+                    .values
+                )
+                if len(a) == 0 or len(b) == 0:
+                    continue
+                c = color_by_name[names[idx]]
+                w_dist = wasserstein_distance(a, b)
+                ax.text(
+                    0.98,
+                    y_annot,
+                    f"W={w_dist:.2g}",
+                    transform=ax.transAxes,
+                    fontsize=tick_fontsize,
+                    va="top",
+                    ha="right",
+                    bbox=dict(
+                        boxstyle="round,pad=0.2",
+                        facecolor=mcolors.to_rgba(c, alpha=0.22),
+                        edgecolor=c,
+                        linewidth=0.8,
+                    ),
+                )
+                y_annot -= 0.14
+
+        # Extra room on the right so the curves clear the W labels
+        xmin, xmax = ax.get_xlim()
+        span = xmax - xmin
+        if span > 0:
+            ax.set_xlim(xmin, xmax + 0.14 * span)
 
     # Turn off any unused subplots
     for j in range(len(properties), len(axes)):
         axes[j].axis("off")
 
-    # Global legend outside the grid
+    # Global legend with square patches to match the bars
+    legend_handles = []
+    for name in names:
+        c = color_by_name[name]
+        alpha = 0.45 if name == "Dataset" else 0.9
+        legend_handles.append(
+            Patch(
+                facecolor=c,
+                edgecolor=c,
+                linewidth=0.5,
+                alpha=alpha,
+            )
+        )
     fig.legend(
-        names,
+        handles=legend_handles,
+        labels=list(names),
         fontsize=legend_fontsize,
         loc="lower center",
         ncol=len(names),
@@ -460,30 +559,31 @@ if __name__ == "__main__":
     ref_dataset_file = "../data/zinc/augmented_zinc250k.txt"
     outfile_kde_plot = "../figures/benchmark_dists.png"
 
-    gen_files = ["../data/generated.txt"]
-    gen_wprops_files = [
-        "../data/generated/generated_annotated.txt",
+    # Raw SMILES files and the annotated files to write
+    gen_jobs = [
+        ("../data/generated_molminer.txt", "../data/generated/molminer_annotated.txt"),
+        ("../data/generated_gdss.txt", "../data/generated/gdss_annotated.txt"),
+        ("../data/generated_hiervae.txt", "../data/generated/hiervae_annotated.txt"),
     ]
 
-    for gen_file, gen_wprops_file in zip(gen_files, gen_wprops_files):
+    os.makedirs(os.path.dirname(gen_jobs[0][1]), exist_ok=True)
+
+    for gen_file, gen_wprops_file in gen_jobs:
         compute_all_stats(
             gen_file=gen_file,
             gen_wprops_file=gen_wprops_file,
             ref_dataset_file=ref_dataset_file,
         )
 
-    file_list = [
-        ref_dataset_file,
-        "../data/generated/generated_annotated.txt",
-    ]
-    names = ["Dataset", "MolMiner"]
+    file_list = [ref_dataset_file] + [out_path for _, out_path in gen_jobs]
+    names = ["Dataset", "MolMiner", "GDSS", "HierVAE"]
     plot_property_kde(
         file_list,
         names,
         outfile=outfile_kde_plot,
         fig_width=7.5,
-        fig_height=9.5,
-        label_fontsize=9,
+        fig_height=5.5,
+        label_fontsize=10,
         tick_fontsize=8,
         legend_fontsize=12,
     )
