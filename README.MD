@@ -1,7 +1,7 @@
 # MolMiner &nbsp;—&nbsp; Towards Controllable, 3D-Aware, Fragment-Based Molecular Design
 [![Python](https://img.shields.io/badge/python-3.9%2B-green.svg)](https://www.python.org/)  
 [![License](https://img.shields.io/badge/License-Apache%202.0-red.svg)](https://www.apache.org/licenses/LICENSE-2.0)  
-[![Model Weights](https://img.shields.io/badge/Zenodo-Model%20Weights-4c6ef5.svg)](https://doi.org/10.5281/zenodo.15496963)  
+[![Model Weights](https://img.shields.io/badge/Zenodo-Model%20Weights-4c6ef5.svg)](https://doi.org/10.5281/zenodo.21631560)  
 [![arXiv](https://img.shields.io/badge/arXiv-2411.06608-b31b1b.svg)](https://arxiv.org/abs/2411.06608)
 
 <p align="center">
@@ -29,8 +29,8 @@ pip install -r requirements.txt
 
 Pre-trained model checkpoints for **MolMiner** are available via Zenodo.
 
-- **Zenodo Record**: [https://zenodo.org/records/15496963](https://zenodo.org/records/15496963)
-- **Direct Download (Files Archive)**: [https://zenodo.org/api/records/15496963/files-archive](https://zenodo.org/api/records/15496963/files-archive)
+- **Zenodo Record**: [https://zenodo.org/records/15496963](https://zenodo.org/records/21631560)
+- **Direct Download (Files Archive)**: [https://zenodo.org/api/records/21631560/files-archive](https://zenodo.org/api/records/21631560/files-archive)
 
 These checkpoints contain trained weights for: MolMiner model, GMM (Gaussian Mixture Model), Fragment-Starter model.
 
@@ -133,21 +133,21 @@ python postprocess_calibration_plot.py --calibration_dir='../data/calibration' -
 
 ## 5. Citation
 
-If you use MolMiner in academic work, please cite:
+If you use MolMiner, please cite:
 
 ```bibtex
-@misc{ortegaochoa2025molminercontrollable3dawarefragmentbased,
-      title={MolMiner: Towards Controllable, 3D-Aware, Fragment-Based Molecular Design}, 
-      author={Raul Ortega-Ochoa and Tejs Vegge and Jes Frellsen},
-      year={2025},
-      eprint={2411.06608},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG},
-      url={https://arxiv.org/abs/2411.06608}, 
+@article{ortegaochoa2026molminer,
+  author  = {Ortega-Ochoa, Raul and Vegge, Tejs and Frellsen, Jes},
+  title   = {MolMiner: Toward Controllable, Three-Dimensional-Aware, Fragment-Based Molecular Design},
+  journal = {Advanced Intelligent Discovery},
+  year    = {2026},
+  pages   = {e70138},
+  doi     = {10.1002/aidi.70138},
+  url     = {https://advanced.onlinelibrary.wiley.com/doi/abs/10.1002/aidi.70138},
+  keywords = {fragment-based molecular assembly, inverse molecular design, property-controlled generation},
 }
 ```
 
 ## 6. License
 
-MolMiner is released under the Apache 2.0 License – see LICENSE for details.
-Contributions are welcome via pull requests or issues!
+MolMiner is released under the Apache 2.0 License see LICENSE for details.
